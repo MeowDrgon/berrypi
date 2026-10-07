@@ -389,14 +389,18 @@ def review_pending(pending_id):
             user_id, time,
             ear, mar, blink, blink_rate_10s,
             nod_ratio, head_ratio, head_motion,
-            label, label_name, user_type
+            label, label_name, user_type,
+            original_label, original_label_name,
+            reviewed_label, reviewed_label_name, label_source
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             user_id, row["time"],
             row["ear"], row["mar"], row["blink"], row["blink_rate_10s"],
             row["nod_ratio"], row["head_ratio"], row["head_motion"],
-            reviewed_label, reviewed_name, row["user_type"] or "general"
+            reviewed_label, reviewed_name, row["user_type"] or "general",
+            original_label, original_name,
+            reviewed_label, reviewed_name, "human_review"
         ))
 
         conn.execute("""
@@ -437,6 +441,85 @@ def review_pending(pending_id):
 # ==========================================
 # berryPi.html 第一階段 API
 # ==========================================
+
+
+# ==========================================
+# 第二階段：誤判分析 / 模型版本
+# ==========================================
+
+@app.route("/api/fatigue/analysis", methods=["GET"])
+def fatigue_analysis_api():
+    user_id = (request.args.get("user_id") or "").strip()
+    if not user_id:
+        return jsonify({"error": "user_id required"}), 400
+
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT original_label, original_label_name,
+               reviewed_label, reviewed_label_name
+        FROM fatigue_data
+        WHERE user_id = ?
+          AND label_source = 'human_review'
+          AND original_label IS NOT NULL
+          AND reviewed_label IS NOT NULL
+    """, (user_id,)).fetchall()
+    model = conn.execute("""
+        SELECT version, big_dataset_type, training_rows, created_at
+        FROM model_versions
+        WHERE user_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+    """, (user_id,)).fetchone()
+    conn.close()
+
+    total = len(rows)
+    correct = sum(1 for r in rows if r["original_label"] == r["reviewed_label"])
+    wrong = total - correct
+    by_label = {}
+    for r in rows:
+        key = int(r["original_label"])
+        item = by_label.setdefault(key, {
+            "label": key,
+            "label_name": r["original_label_name"] or LABEL_MAP.get(key, "UNKNOWN"),
+            "total": 0, "correct": 0, "wrong": 0
+        })
+        item["total"] += 1
+        if r["original_label"] == r["reviewed_label"]:
+            item["correct"] += 1
+        else:
+            item["wrong"] += 1
+
+    return jsonify({
+        "user_id": user_id,
+        "reviewed_samples": total,
+        "correct": correct,
+        "wrong": wrong,
+        "accuracy": round(correct / total, 4) if total else None,
+        "error_rate": round(wrong / total, 4) if total else None,
+        "false_positive": sum(1 for r in rows if r["original_label"] != 0 and r["reviewed_label"] == 0),
+        "false_negative": sum(1 for r in rows if r["original_label"] == 0 and r["reviewed_label"] != 0),
+        "by_original_label": list(by_label.values()),
+        "latest_model": dict(model) if model else None
+    })
+
+
+@app.route("/api/model/status", methods=["GET"])
+def model_status_api():
+    user_id = (request.args.get("user_id") or "").strip()
+    if not user_id:
+        return jsonify({"error": "user_id required"}), 400
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT version, model_type, big_dataset_type,
+               training_rows, is_active, rule_path, created_at
+        FROM model_versions
+        WHERE user_id = ?
+        ORDER BY id DESC
+        LIMIT 10
+    """, (user_id,)).fetchall()
+    conn.close()
+    return jsonify([dict(row) for row in rows])
+
 
 @app.route("/api/fatigue/reviews", methods=["GET"])
 def fatigue_reviews_api():
@@ -569,6 +652,21 @@ def fatigue_review_api():
         return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
+
+
+
+@app.route("/api/model/retrain", methods=["POST"])
+def model_retrain_api():
+    secret = request.headers.get("X-Training-Key", "")
+    expected = os.environ.get("TRAINING_API_KEY", "")
+    if not expected or secret != expected:
+        return jsonify({"error": "training authorization required"}), 403
+    try:
+        from train_1 import train_all_users
+        train_all_users()
+        return jsonify({"status": "success", "message": "monthly retraining completed"})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 
 def get_big_dataset_path(big_dataset_type=None):
