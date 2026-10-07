@@ -117,6 +117,7 @@ th{background:#f7f8f9}
     <button class="active" onclick="showPage('dashboard',this)">首頁</button>
     <button onclick="showPage('review',this)">疲勞標示</button>
     <button onclick="showPage('driving',this)">行車概況</button>
+    <button onclick="showPage('analysis',this)">誤判分析</button>
     <button id="adminNav" onclick="showPage('admin',this)" style="display:none">管理員後台</button>
     <button onclick="logout()">登出</button>
   </div>
@@ -260,6 +261,25 @@ th{background:#f7f8f9}
       <div id="reviewList"></div>
     </section>
 
+    
+    <section id="analysis" class="page">
+      <h2>📊 誤判分析與模型</h2>
+      <div class="grid">
+        <div class="stat">人工審核<div class="num" id="aReviewed">0</div></div>
+        <div class="stat">模型正確<div class="num" id="aCorrect">0</div></div>
+        <div class="stat">模型誤判<div class="num" id="aWrong">0</div></div>
+        <div class="stat">準確率<div class="num" id="aAccuracy">-</div></div>
+      </div>
+      <div class="card">
+        <h3>誤判類型</h3>
+        <div id="analysisSummary">載入中…</div>
+      </div>
+      <div class="card">
+        <h3>目前模型</h3>
+        <div id="modelStatus">載入中…</div>
+      </div>
+    </section>
+
     <section id="driving" class="page">
       <h2>🚗 行車概況</h2>
       <div class="card">
@@ -311,6 +331,7 @@ function showPage(id,btn){
   if(btn) btn.classList.add("active");
   if(id==="review") loadReviews();
   if(id==="driving") loadDriving();
+  if(id==="analysis") loadAnalysis();
   if(id==="admin"){loadUsers();loadDevices();}
 }
 async function login(){
@@ -427,6 +448,33 @@ async function review(id,decision){
     alert("❌ "+e.message);
   }
 }
+async function loadAnalysis(){
+  if(!currentUser) return;
+  try{
+    const d=await api("/fatigue/analysis?user_id="+encodeURIComponent(currentUser.user_id));
+    document.getElementById("aReviewed").innerText=d.reviewed_samples||0;
+    document.getElementById("aCorrect").innerText=d.correct||0;
+    document.getElementById("aWrong").innerText=d.wrong||0;
+    document.getElementById("aAccuracy").innerText=d.accuracy==null ? "-" : Math.round(d.accuracy*100)+"%";
+
+    const rows=d.by_original_label||[];
+    document.getElementById("analysisSummary").innerHTML = rows.length
+      ? rows.map(x=>`<div style="padding:8px 0;border-bottom:1px solid #eee">
+          <b>${x.label_name}</b>：${x.total} 筆，
+          正確 ${x.correct}，
+          誤判 ${x.wrong}
+        </div>`).join("")
+      : "目前尚無人工審核資料。";
+
+    const m=d.latest_model;
+    document.getElementById("modelStatus").innerHTML = m
+      ? `版本：<b>${m.version}</b><br>訓練資料：${m.training_rows} 筆<br>更新時間：${m.created_at}`
+      : "尚未建立模型版本。";
+  }catch(e){
+    document.getElementById("analysisSummary").innerText="載入失敗："+e.message;
+  }
+}
+
 async function loadDriving(){
   try{
     const date=document.getElementById("driveDate").value || new Date().toISOString().slice(0,10);
