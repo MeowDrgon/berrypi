@@ -157,13 +157,80 @@ def init_db():
     ON fatigue_rules(user_id)
     """)
 
+
+    # 第一階段測試帳號：111 / 222
+    # 只在帳號不存在或尚未設定密碼時建立，不覆蓋既有使用者密碼。
+    cursor.execute("""
+    INSERT OR IGNORE INTO users (user_id, user_type, password_hash)
+    VALUES ('111', 'general', ?)
+    """, (generate_password_hash("222"),))
+    cursor.execute("""
+    UPDATE users
+    SET password_hash = ?
+    WHERE user_id = '111' AND (password_hash IS NULL OR password_hash = '')
+    """, (generate_password_hash("222"),))
+
     conn.commit()
     conn.close()
     print("[DB] SQLite initialized / migrated")
 
 
+
+# ==========================================
+# 前端 API 跨來源存取
+# ==========================================
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
+
+
 def login_required():
     return session.get("user_id")
+
+
+
+@app.route("/api/login", methods=["POST"])
+def api_login():
+    data = request.get_json(silent=True) or {}
+    account = (data.get("account") or data.get("user_id") or "").strip()
+    password = data.get("password") or ""
+
+    if not account or not password:
+        return jsonify({"status": "error", "msg": "請輸入帳號與密碼"}), 400
+
+    conn = get_db()
+    row = conn.execute("""
+        SELECT user_id, user_type, password_hash
+        FROM users
+        WHERE user_id = ?
+    """, (account,)).fetchone()
+    conn.close()
+
+    if row is None or not row["password_hash"]:
+        return jsonify({"status": "error", "msg": "帳號或密碼錯誤"}), 401
+
+    try:
+        valid = check_password_hash(row["password_hash"], password)
+    except Exception:
+        valid = False
+
+    if not valid:
+        return jsonify({"status": "error", "msg": "帳號或密碼錯誤"}), 401
+
+    session.clear()
+    session["user_id"] = row["user_id"]
+
+    return jsonify({
+        "status": "success",
+        "user_id": row["user_id"],
+        "account": row["user_id"],
+        "nickname": row["user_id"],
+        "role": "user",
+        "user_type": row["user_type"] or "general"
+    })
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -362,6 +429,144 @@ def review_pending(pending_id):
     except Exception as e:
         conn.rollback()
         return jsonify({"status": "error", "msg": str(e)}), 500
+    finally:
+        conn.close()
+
+
+
+# ==========================================
+# berryPi.html 第一階段 API
+# ==========================================
+
+@app.route("/api/fatigue/reviews", methods=["GET"])
+def fatigue_reviews_api():
+    user_id = (request.args.get("user_id") or "").strip()
+    if not user_id:
+        return jsonify({"error": "user_id required"}), 400
+
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT
+            id, time,
+            ear, mar, blink, blink_rate_10s,
+            nod_ratio, head_ratio, head_motion,
+            label, label_name,
+            original_label, original_label_name,
+            user_type, created_at
+        FROM pending_data
+        WHERE user_id = ?
+          AND COALESCE(review_status, 'pending') = 'pending'
+        ORDER BY id ASC
+    """, (user_id,)).fetchall()
+    conn.close()
+
+    result = []
+    for row in rows:
+        item = dict(row)
+        original_label = item["original_label"] if item["original_label"] is not None else item["label"]
+        original_name = item["original_label_name"] or item["label_name"] or LABEL_MAP.get(original_label, "UNKNOWN")
+        result.append({
+            "id": item["id"],
+            "time": item["time"],
+            "device_id": item.get("device_id"),
+            "ear": item["ear"],
+            "mar": item["mar"],
+            "blink": item["blink"],
+            "blink_rate_10s": item["blink_rate_10s"],
+            "nod_ratio": item["nod_ratio"],
+            "head_ratio": item["head_ratio"],
+            "head_motion": item["head_motion"],
+            "auto_label": original_label,
+            "auto_label_name": original_name
+        })
+
+    return jsonify(result)
+
+
+@app.route("/api/fatigue/review", methods=["POST"])
+def fatigue_review_api():
+    data = request.get_json(silent=True) or {}
+    try:
+        pending_id = int(data.get("id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "id required"}), 400
+
+    user_id = (data.get("reviewed_by") or data.get("user_id") or "").strip()
+    decision = data.get("decision")
+
+    if decision is None and data.get("result") in (0, 1, "0", "1"):
+        decision = "correct" if int(data.get("result")) == 1 else "false_positive"
+
+    if not user_id:
+        return jsonify({"error": "reviewed_by required"}), 400
+    if decision not in ("correct", "false_positive"):
+        return jsonify({"error": "decision must be correct or false_positive"}), 400
+
+    conn = get_db()
+    try:
+        row = conn.execute("""
+            SELECT *
+            FROM pending_data
+            WHERE id = ?
+              AND user_id = ?
+              AND COALESCE(review_status, 'pending') = 'pending'
+        """, (pending_id, user_id)).fetchone()
+
+        if row is None:
+            return jsonify({"error": "pending data not found or already reviewed"}), 404
+
+        original_label = row["original_label"] if row["original_label"] is not None else row["label"]
+        original_name = row["original_label_name"] or row["label_name"] or LABEL_MAP.get(original_label, "UNKNOWN")
+
+        # 第一階段二選一：正確保留原始模型 Label；誤判改為 NORMAL。
+        reviewed_label = int(original_label) if decision == "correct" else 0
+        reviewed_name = LABEL_MAP.get(reviewed_label, "UNKNOWN")
+
+        conn.execute("""
+            INSERT INTO fatigue_data (
+                user_id, time,
+                ear, mar, blink, blink_rate_10s,
+                nod_ratio, head_ratio, head_motion,
+                label, label_name, user_type
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            user_id, row["time"],
+            row["ear"], row["mar"], row["blink"], row["blink_rate_10s"],
+            row["nod_ratio"], row["head_ratio"], row["head_motion"],
+            reviewed_label, reviewed_name, row["user_type"] or "general"
+        ))
+
+        conn.execute("""
+            UPDATE pending_data
+            SET original_label = ?,
+                original_label_name = ?,
+                review_status = 'reviewed',
+                reviewed_label = ?,
+                reviewed_label_name = ?,
+                reviewed_by = ?,
+                reviewed_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND user_id = ?
+        """, (
+            original_label, original_name,
+            reviewed_label, reviewed_name,
+            user_id, pending_id, user_id
+        ))
+
+        conn.commit()
+        return jsonify({
+            "status": "success",
+            "message": "審核完成，已寫入 fatigue_data",
+            "pending_id": pending_id,
+            "decision": decision,
+            "original_label": original_label,
+            "original_label_name": original_name,
+            "reviewed_label": reviewed_label,
+            "reviewed_label_name": reviewed_name
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
 
