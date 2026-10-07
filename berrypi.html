@@ -318,34 +318,32 @@ async function login(){
   const account=document.getElementById("loginAccount").value.trim();
   const password=document.getElementById("loginPassword").value;
 
-  // 測試帳號：111 / 222
-  if(account==="111" && password==="222"){
-    currentUser={
-      user_id:"111",
-      account:"111",
-      nickname:"測試使用者",
-      role:"user"
-    };
-    document.getElementById("loginPage").style.display="none";
-    document.getElementById("app").style.display="block";
-    document.getElementById("welcome").innerText="測試使用者";
-    if(typeof refreshDashboard==="function") refreshDashboard();
+  if(!account || !password){
+    msg.innerText="❌ 請輸入帳號與密碼";
+    msg.style.color="#c62828";
     return;
   }
 
-  // 其他帳號仍使用 Flask 後端登入
   try{
-    const d=await api("/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-      account:account,
-      password:password
-    })});
+    const d=await api("/login",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({account,password})
+    });
+
     currentUser=d;
     document.getElementById("loginPage").style.display="none";
     document.getElementById("app").style.display="block";
-    document.getElementById("welcome").innerText=d.nickname || d.username || d.user_id;
+    document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));
+    document.getElementById("dashboard").classList.add("active");
+
     if(d.role==="admin") document.getElementById("adminNav").style.display="inline-block";
-    refreshDashboard();
-  }catch(e){msg.innerText="❌ "+e.message;msg.style.color="#c62828";}
+    msg.innerText="";
+    loadReviews();
+  }catch(e){
+    msg.innerText="❌ "+e.message;
+    msg.style.color="#c62828";
+  }
 }
 async function bindDevice(){
   try{
@@ -370,9 +368,16 @@ async function refreshDashboard(){
 }
 async function loadReviews(){
   const box=document.getElementById("reviewList");
+  if(!currentUser){return;}
+
   try{
     const rows=await api("/fatigue/reviews?user_id="+encodeURIComponent(currentUser.user_id));
-    if(!rows.length){box.innerHTML='<div class="card">目前沒有待審核畫面。</div>';return;}
+
+    if(!rows.length){
+      box.innerHTML='<div class="card">目前沒有待審核畫面。</div>';
+      return;
+    }
+
     box.innerHTML=rows.map(r=>`
       <div class="card review">
         <div>
@@ -391,20 +396,36 @@ async function loadReviews(){
             <div class="feature">HeadMotion<br><b>${r.head_motion}</b></div>
           </div>
           <div class="actions">
-            <button class="success" onclick="review(${r.id},1)">確認為疲勞</button>
-            <button class="danger" onclick="review(${r.id},0)">確認非疲勞</button>
+            <button class="success" onclick="review(${r.id},'correct')">✓ 模型正確</button>
+            <button class="danger" onclick="review(${r.id},'false_positive')">✕ 模型誤判</button>
           </div>
         </div>
       </div>`).join("");
-  }catch(e){box.innerHTML='<div class="card">載入失敗：'+e.message+'</div>'}
+  }catch(e){
+    box.innerHTML='<div class="card">載入失敗：'+e.message+'</div>';
+  }
 }
-async function review(id,result){
+async function review(id,decision){
+  const text=decision==="correct" ? "確認模型判定正確？" : "確認這筆是模型誤判？";
+  if(!confirm(text)) return;
+
   try{
-    const d=await api("/fatigue/review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-      id,result,reviewed_by:currentUser.user_id,add_to_dataset:true
-    })});
-    alert(d.message||"審核完成");loadReviews();refreshDashboard();
-  }catch(e){alert("❌ "+e.message)}
+    const d=await api("/fatigue/review",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        id,
+        decision,
+        reviewed_by:currentUser.user_id,
+        add_to_dataset:true
+      })
+    });
+    alert(d.message||"審核完成");
+    loadReviews();
+    refreshDashboard();
+  }catch(e){
+    alert("❌ "+e.message);
+  }
 }
 async function loadDriving(){
   try{
