@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>疲勞駕駛監測管理系統</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:"Microsoft JhengHei",Arial,sans-serif;background:#f4f6f8;color:#263238}
+.nav{background:#34aae4;color:#fff;padding:14px 24px;display:flex;align-items:center;gap:8px}
+.nav .title{font-size:20px;font-weight:bold;margin-right:auto}
+.nav button{background:transparent;border:0;color:#fff;padding:9px 13px;border-radius:6px;cursor:pointer;font-weight:bold}
+.nav button:hover,.nav button.active{background:#455a64}
+.container{max-width:1250px;margin:24px auto;padding:0 18px}
+.page{display:none}.page.active{display:block}
+.card{background:#fff;border-radius:10px;padding:20px;box-shadow:0 2px 8px #00000012;margin-bottom:18px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:15px}
+.stat{padding:18px;border-radius:9px;background:#fff;border-left:5px solid #607d8b}
+.stat .num{font-size:30px;font-weight:bold;margin-top:8px}
+button.primary{background:#1976d2;color:white;border:0;padding:9px 15px;border-radius:6px;cursor:pointer}
+button.success{background:#2e7d32;color:white;border:0;padding:9px 15px;border-radius:6px;cursor:pointer}
+button.danger{background:#c62828;color:white;border:0;padding:9px 15px;border-radius:6px;cursor:pointer}
+button.gray{background:#607d8b;color:white;border:0;padding:9px 15px;border-radius:6px;cursor:pointer}
+input,select{width:100%;padding:10px;border:1px solid #ccd3d8;border-radius:6px;margin:6px 0 12px}
+label{font-weight:bold;font-size:14px}
+table{width:100%;border-collapse:collapse}
+th,td{border-bottom:1px solid #e5e7e9;padding:11px;text-align:left;font-size:14px}
+th{background:#f7f8f9}
+.badge{display:inline-block;padding:4px 8px;border-radius:12px;font-size:12px}
+.badge.green{background:#e8f5e9;color:#2e7d32}.badge.red{background:#ffebee;color:#c62828}.badge.yellow{background:#fff8e1;color:#f57f17}.badge.blue{background:#e3f2fd;color:#1565c0}
+.login-wrap{max-width:450px;margin:70px auto}
+.review{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.fake-frame{height:300px;background:linear-gradient(135deg,#263238,#607d8b);border-radius:8px;color:white;display:flex;align-items:center;justify-content:center;font-size:24px}
+.feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.feature{background:#f5f7f8;padding:12px;border-radius:6px}
+.actions{display:flex;gap:10px;margin-top:16px}
+.muted{color:#68747c;font-size:13px}
+.notice{background:#e3f2fd;padding:12px;border-radius:7px;margin-bottom:15px}
+@media(max-width:850px){.grid{grid-template-columns:repeat(2,1fr)}.review{grid-template-columns:1fr}.feature-grid{grid-template-columns:1fr 1fr}}
+
+/* ===== Dashboard ===== */
+.page-header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:22px}
+.page-header h2{margin:0 0 5px;font-size:26px}
+.muted{color:#7b8494;font-size:14px}
+.status-pill{padding:9px 14px;border-radius:999px;font-size:13px;font-weight:700}
+.status-pill.online{background:#eaf8ef;color:#21884b}
+.dashboard-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px}
+.stat-card{background:#fff;border:1px solid #e7eaf0;border-radius:16px;padding:20px;display:flex;align-items:center;gap:15px;box-shadow:0 4px 14px rgba(25,35,55,.05)}
+.stat-card.warning{border-left:4px solid #f0a43c}
+.stat-icon{width:45px;height:45px;border-radius:13px;background:#f3f6fa;display:flex;align-items:center;justify-content:center;font-size:22px}
+.stat-label{font-size:13px;color:#7b8494;margin-bottom:5px}
+.stat-value{font-size:27px;font-weight:800;color:#202733}
+.small-value{font-size:20px}
+.stat-sub{font-size:12px;color:#8a93a2;margin-top:3px}
+.dashboard-two-col{display:grid;grid-template-columns:1.35fr 1fr;gap:18px;margin-bottom:18px}
+.panel{background:#fff;border:1px solid #e7eaf0;border-radius:16px;padding:20px;box-shadow:0 4px 14px rgba(25,35,55,.05)}
+.panel-title{display:flex;justify-content:space-between;align-items:center;font-size:16px;font-weight:800;margin-bottom:16px}
+.text-btn{border:0;background:none;color:#3578e5;cursor:pointer;font-weight:700}
+.event-list{display:flex;flex-direction:column}
+.event-item{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid #eef0f4}
+.event-item:last-child{border-bottom:0}
+.event-time{font-size:12px;color:#8b94a3;width:65px}
+.event-main{flex:1;display:flex;flex-direction:column;gap:4px}
+.event-main strong{font-size:14px}
+.event-main span{font-size:12px;color:#7b8494}
+.badge{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:700}
+.badge.danger{background:#fff0f0;color:#d44949}
+.badge.success{background:#eaf8ef;color:#21884b}
+.vehicle-card{display:flex;align-items:center;gap:15px;padding:15px;background:#f7f9fc;border-radius:13px}
+.vehicle-icon{font-size:38px}
+.vehicle-info h3{margin:0 0 6px;font-size:17px}
+.vehicle-info p{margin:3px 0;color:#788292;font-size:13px}
+.connection-box{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding:13px;border:1px solid #e7eaf0;border-radius:12px;font-size:13px}
+.dot-green{display:inline-block;width:9px;height:9px;background:#36b66a;border-radius:50%;margin-right:7px}
+.today-status{margin-bottom:20px}
+.progress-row{margin:8px 0 14px}
+.progress-label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px}
+.progress-track{height:10px;background:#edf0f4;border-radius:999px;overflow:hidden}
+.progress-fill{height:100%;background:#3caf70;border-radius:999px}
+.status-summary{display:flex;gap:25px;flex-wrap:wrap;color:#697382;font-size:13px}
+@media(max-width:900px){
+  .dashboard-grid{grid-template-columns:repeat(2,1fr)}
+  .dashboard-two-col{grid-template-columns:1fr}
+}
+@media(max-width:600px){
+  .dashboard-grid{grid-template-columns:1fr}
+  .page-header{align-items:flex-start;flex-direction:column}
+}
+
+</style>
+</head>
+<body>
+
+<div id="loginPage">
+  <div class="login-wrap">
+    <div class="card">
+      <h1>🚗 疲勞駕駛監測系統</h1>
+      <p class="muted">登入後將使用者、車輛與樹莓派設備建立關聯。</p>
+      <label>帳號</label><input id="loginAccount" placeholder="請輸入帳號">
+      <label>密碼</label><input id="loginPassword" type="password" placeholder="請輸入密碼">
+      <button class="primary" style="width:100%" onclick="login()">登入</button>
+      <p id="loginMsg"></p>
+      <hr>
+      
+      
+      
+      
+      
+      
+    </div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <div class="nav">
+    <div class="title">🚗 疲勞駕駛監測系統</div>
+    <button class="active" onclick="showPage('dashboard',this)">首頁</button>
+    <button onclick="showPage('review',this)">疲勞標示</button>
+    <button onclick="showPage('driving',this)">行車概況</button>
+    <button id="adminNav" onclick="showPage('admin',this)" style="display:none">管理員後台</button>
+    <button onclick="logout()">登出</button>
+  </div>
+
+  <div class="container">
+    
+<section id="dashboard" class="page">
+  <div class="page-header">
+    <div>
+      <h2>首頁 Dashboard</h2>
+      <p class="muted">歡迎回來，查看今日行車與疲勞監測狀態。</p>
+    </div>
+    <div class="status-pill online">● 樹莓派 PI001 在線</div>
+  </div>
+
+  <div class="dashboard-grid">
+    <div class="stat-card">
+      <div class="stat-icon">🚗</div>
+      <div>
+        <div class="stat-label">今日行車時間</div>
+        <div class="stat-value" id="dashDriveTime">02:35</div>
+      </div>
+    </div>
+
+    <div class="stat-card warning">
+      <div class="stat-icon">⚠️</div>
+      <div>
+        <div class="stat-label">疲勞事件</div>
+        <div class="stat-value" id="dashFatigueCount">3</div>
+        <div class="stat-sub">待確認事件</div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon">✓</div>
+      <div>
+        <div class="stat-label">已確認疲勞</div>
+        <div class="stat-value" id="dashConfirmedCount">2</div>
+        <div class="stat-sub">今日</div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon">📡</div>
+      <div>
+        <div class="stat-label">設備狀態</div>
+        <div class="stat-value small-value">正常</div>
+        <div class="stat-sub">最後連線 17:32</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard-two-col">
+    <div class="panel">
+      <div class="panel-title">
+        <span>🚨 待審核疲勞事件</span>
+        <button class="text-btn" onclick="showPage('review')">查看全部 →</button>
+      </div>
+
+      <div class="event-list">
+        <div class="event-item">
+          <div class="event-time">17:21:35</div>
+          <div class="event-main">
+            <strong>閉眼／眨眼</strong>
+            <span>EAR 0.182　BlinkRate 2.1</span>
+          </div>
+          <span class="badge danger">待審核</span>
+        </div>
+
+        <div class="event-item">
+          <div class="event-time">17:18:42</div>
+          <div class="event-main">
+            <strong>打哈欠</strong>
+            <span>MAR 0.150　EAR 0.241</span>
+          </div>
+          <span class="badge danger">待審核</span>
+        </div>
+
+        <div class="event-item">
+          <div class="event-time">17:12:08</div>
+          <div class="event-main">
+            <strong>點頭</strong>
+            <span>NodRatio 0.380　HeadRatio 0.560</span>
+          </div>
+          <span class="badge danger">待審核</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">
+        <span>🚘 我的車輛</span>
+        <span class="badge success">已綁定</span>
+      </div>
+
+      <div class="vehicle-card">
+        <div class="vehicle-icon">🚙</div>
+        <div class="vehicle-info">
+          <h3>Toyota Corolla</h3>
+          <p>車牌：ABC-1234</p>
+          <p>設備：PI001</p>
+        </div>
+      </div>
+
+      <div class="connection-box">
+        <div>
+          <span class="dot-green"></span>
+          <strong>樹莓派連線正常</strong>
+        </div>
+        <span class="muted">最後連線：17:32</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel today-status">
+    <div class="panel-title">
+      <span>📊 今日監測狀態</span>
+    </div>
+    <div class="progress-row">
+      <div class="progress-label">
+        <span>正常行車</span>
+        <strong>82%</strong>
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:82%"></div></div>
+    </div>
+    <div class="status-summary">
+      <span>🟢 正常事件：14</span>
+      <span>🟡 待審核：3</span>
+      <span>🔴 確認疲勞：2</span>
+    </div>
+  </div>
+</section>
+
+
+    <section id="review" class="page">
+      <h2>⚠️ 疲勞標示</h2>
+      <div class="card">
+        <p class="muted">系統先將可疑畫面送進審核佇列，確認後才加入大數據資料。</p>
+        <button class="gray" onclick="loadReviews()">重新載入</button>
+      </div>
+      <div id="reviewList"></div>
+    </section>
+
+    <section id="driving" class="page">
+      <h2>🚗 行車概況</h2>
+      <div class="card">
+        <label>日期</label><input type="date" id="driveDate">
+        <button class="primary" onclick="loadDriving()">查詢</button>
+      </div>
+      <div class="grid">
+        <div class="stat">資料筆數<div class="num" id="dSamples">0</div></div>
+        <div class="stat">疲勞事件<div class="num" id="dFatigue">0</div></div>
+        <div class="stat">平均 EAR<div class="num" id="dEar">0</div></div>
+        <div class="stat">平均 MAR<div class="num" id="dMar">0</div></div>
+      </div>
+      <div class="card">
+        <h3>狀態統計</h3><div id="stateStats"></div>
+      </div>
+    </section>
+
+    <section id="admin" class="page">
+      <h2>🛠 管理員後台</h2>
+      <div class="card">
+        <h3>使用者管理</h3>
+        <p class="muted">可查看：電子郵件、暱稱、電話、車種、帳號狀態。不可查看真實姓名與密碼。</p>
+        <button class="gray" onclick="loadUsers()">重新載入</button>
+        <div style="overflow:auto"><table><thead><tr><th>使用者</th><th>暱稱</th><th>Email</th><th>電話</th><th>車種</th><th>狀態</th><th>操作</th></tr></thead><tbody id="userRows"></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>樹莓派／車輛設備</h3>
+        <div style="overflow:auto"><table><thead><tr><th>設備 ID</th><th>使用者</th><th>車輛</th><th>車種</th><th>最後連線</th><th>狀態</th></tr></thead><tbody id="deviceRows"></tbody></table></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const API_BASE = "http://172.16.126.162:5000/api";
+let currentUser = null;
+
+function api(path, options={}) {
+  return fetch(API_BASE + path, options).then(async r=>{
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.error || d.msg || "伺服器錯誤");
+    return d;
+  });
+}
+function showPage(id,btn){
+  document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));
+  if(btn) btn.classList.add("active");
+  if(id==="review") loadReviews();
+  if(id==="driving") loadDriving();
+  if(id==="admin"){loadUsers();loadDevices();}
+}
+async function login(){
+  const msg=document.getElementById("loginMsg");
+  const account=document.getElementById("loginAccount").value.trim();
+  const password=document.getElementById("loginPassword").value;
+
+  // 測試帳號：111 / 222
+  if(account==="111" && password==="222"){
+    currentUser={
+      user_id:"111",
+      account:"111",
+      nickname:"測試使用者",
+      role:"user"
+    };
+    document.getElementById("loginPage").style.display="none";
+    document.getElementById("app").style.display="block";
+    document.getElementById("welcome").innerText="測試使用者";
+    if(typeof refreshDashboard==="function") refreshDashboard();
+    return;
+  }
+
+  // 其他帳號仍使用 Flask 後端登入
+  try{
+    const d=await api("/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+      account:account,
+      password:password
+    })});
+    currentUser=d;
+    document.getElementById("loginPage").style.display="none";
+    document.getElementById("app").style.display="block";
+    document.getElementById("welcome").innerText=d.nickname || d.username || d.user_id;
+    if(d.role==="admin") document.getElementById("adminNav").style.display="inline-block";
+    refreshDashboard();
+  }catch(e){msg.innerText="❌ "+e.message;msg.style.color="#c62828";}
+}
+async function bindDevice(){
+  try{
+    const d=await api("/device/bind",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+      user_id:currentUser.user_id,
+      car_type:document.getElementById("carType").value,
+      vehicle_id:document.getElementById("vehicleId").value,
+      device_id:document.getElementById("deviceId").value
+    })});
+    alert(d.message||"綁定成功");refreshDashboard();
+  }catch(e){alert("❌ "+e.message);}
+}
+async function refreshDashboard(){
+  try{
+    const d=await api("/dashboard?user_id="+encodeURIComponent(currentUser.user_id));
+    document.getElementById("sPending").innerText=d.pending||0;
+    document.getElementById("sSamples").innerText=d.samples||0;
+    document.getElementById("sFatigue").innerText=d.fatigue_events||0;
+    document.getElementById("sOnline").innerText=d.online_devices||0;
+    document.getElementById("deviceStatus").innerText=d.device_id||"尚未綁定";
+  }catch(e){console.error(e)}
+}
+async function loadReviews(){
+  const box=document.getElementById("reviewList");
+  try{
+    const rows=await api("/fatigue/reviews?user_id="+encodeURIComponent(currentUser.user_id));
+    if(!rows.length){box.innerHTML='<div class="card">目前沒有待審核畫面。</div>';return;}
+    box.innerHTML=rows.map(r=>`
+      <div class="card review">
+        <div>
+          <div class="fake-frame">📷 可疑畫面 #${r.id}</div>
+          <p class="muted">時間：${r.time||"-"}　設備：${r.device_id||"-"}</p>
+        </div>
+        <div>
+          <h3>系統判定：<span class="badge yellow">${r.auto_label_name||"待確認"}</span></h3>
+          <div class="feature-grid">
+            <div class="feature">EAR<br><b>${r.ear}</b></div>
+            <div class="feature">MAR<br><b>${r.mar}</b></div>
+            <div class="feature">Blink<br><b>${r.blink}</b></div>
+            <div class="feature">BlinkRate10s<br><b>${r.blink_rate_10s}</b></div>
+            <div class="feature">NodRatio<br><b>${r.nod_ratio}</b></div>
+            <div class="feature">HeadRatio<br><b>${r.head_ratio}</b></div>
+            <div class="feature">HeadMotion<br><b>${r.head_motion}</b></div>
+          </div>
+          <div class="actions">
+            <button class="success" onclick="review(${r.id},1)">確認為疲勞</button>
+            <button class="danger" onclick="review(${r.id},0)">確認非疲勞</button>
+          </div>
+        </div>
+      </div>`).join("");
+  }catch(e){box.innerHTML='<div class="card">載入失敗：'+e.message+'</div>'}
+}
+async function review(id,result){
+  try{
+    const d=await api("/fatigue/review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+      id,result,reviewed_by:currentUser.user_id,add_to_dataset:true
+    })});
+    alert(d.message||"審核完成");loadReviews();refreshDashboard();
+  }catch(e){alert("❌ "+e.message)}
+}
+async function loadDriving(){
+  try{
+    const date=document.getElementById("driveDate").value || new Date().toISOString().slice(0,10);
+    const d=await api("/driving/summary?user_id="+encodeURIComponent(currentUser.user_id)+"&date="+date);
+    document.getElementById("dSamples").innerText=d.samples||0;
+    document.getElementById("dFatigue").innerText=d.fatigue_events||0;
+    document.getElementById("dEar").innerText=d.avg_ear ?? 0;
+    document.getElementById("dMar").innerText=d.avg_mar ?? 0;
+    document.getElementById("stateStats").innerHTML=Object.entries(d.states||{}).map(([k,v])=>`<p>${k}：<b>${v}</b></p>`).join("")||"無資料";
+  }catch(e){console.error(e)}
+}
+async function loadUsers(){
+  try{
+    const rows=await api("/admin/users");
+    document.getElementById("userRows").innerHTML=rows.map(u=>`<tr>
+      <td>${u.user_id}</td><td>${u.nickname||"-"}</td><td>${u.email||"-"}</td><td>${u.phone||"-"}</td>
+      <td>${u.car_type||"-"}</td><td><span class="badge ${u.status==="active"?"green":"red"}">${u.status}</span></td>
+      <td>${u.status==="active"?`<button class="danger" onclick="banUser('${u.user_id}')">停權</button>`:`<button class="success" onclick="unbanUser('${u.user_id}')">解除停權</button>`}</td>
+    </tr>`).join("");
+  }catch(e){console.error(e)}
+}
+async function banUser(id){if(!confirm("確定停權？"))return;await changeBan(id,true)}
+async function unbanUser(id){await changeBan(id,false)}
+async function changeBan(id,banned){
+  try{const d=await api("/admin/user/ban",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_id:id,banned})});alert(d.message||"操作完成");loadUsers()}
+  catch(e){alert("❌ "+e.message)}
+}
+async function loadDevices(){
+  try{
+    const rows=await api("/admin/devices");
+    document.getElementById("deviceRows").innerHTML=rows.map(x=>`<tr><td>${x.device_id}</td><td>${x.user_id}</td><td>${x.vehicle_id}</td><td>${x.car_type||"-"}</td><td>${x.last_seen||"-"}</td><td>${x.status||"-"}</td></tr>`).join("");
+  }catch(e){console.error(e)}
+}
+function logout(){location.reload()}
+document.getElementById("driveDate").value=new Date().toISOString().slice(0,10);
+</script>
+</body>
+</html>
