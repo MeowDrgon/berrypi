@@ -551,7 +551,7 @@ def train_multiclass_rule_from_dataset(df, user_type):
 # ==========================================
 # 儲存 rule.json
 # ==========================================
-def save_rule(user_id, rule):
+def save_rule(user_id, rule, len(train_df)):
 
     rule_path = get_rule_path(user_id)
 
