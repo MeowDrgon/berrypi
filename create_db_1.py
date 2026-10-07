@@ -114,7 +114,12 @@ CREATE TABLE IF NOT EXISTS fatigue_data (
     blink INTEGER,
     nod_ratio REAL,
     head_ratio REAL,
-    label INTEGER
+    label INTEGER,
+    original_label INTEGER,
+    original_label_name TEXT,
+    reviewed_label INTEGER,
+    reviewed_label_name TEXT,
+    label_source TEXT DEFAULT 'legacy'
 )
 """)
 
@@ -123,7 +128,53 @@ add_column_if_not_exists(cursor, "fatigue_data", "head_motion", "REAL DEFAULT 0"
 add_column_if_not_exists(cursor, "fatigue_data", "label_name", "TEXT")
 add_column_if_not_exists(cursor, "fatigue_data", "user_type", "TEXT DEFAULT 'general'")
 add_column_if_not_exists(cursor, "fatigue_data", "created_at", "TEXT DEFAULT CURRENT_TIMESTAMP")
+add_column_if_not_exists(cursor, "fatigue_data", "original_label", "INTEGER")
+add_column_if_not_exists(cursor, "fatigue_data", "original_label_name", "TEXT")
+add_column_if_not_exists(cursor, "fatigue_data", "reviewed_label", "INTEGER")
+add_column_if_not_exists(cursor, "fatigue_data", "reviewed_label_name", "TEXT")
+add_column_if_not_exists(cursor, "fatigue_data", "label_source", "TEXT DEFAULT 'legacy'")
 
+
+# ==========================================
+# 第二階段：模型版本與訓練紀錄
+# ==========================================
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS model_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    version TEXT NOT NULL,
+    model_type TEXT DEFAULT 'multiclass_rule',
+    big_dataset_type TEXT,
+    training_rows INTEGER DEFAULT 0,
+    false_positive_rate REAL,
+    false_negative_rate REAL,
+    is_active INTEGER DEFAULT 0,
+    rule_path TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS training_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_key TEXT UNIQUE,
+    run_type TEXT,
+    started_at TEXT,
+    finished_at TEXT,
+    status TEXT,
+    users_trained INTEGER DEFAULT 0,
+    message TEXT
+)
+""")
+
+cursor.execute("""
+CREATE INDEX IF NOT EXISTS idx_model_versions_user_created
+ON model_versions(user_id, created_at)
+""")
+cursor.execute("""
+CREATE INDEX IF NOT EXISTS idx_training_runs_key
+ON training_runs(run_key)
+""")
 
 # ==========================================
 # Rule 資料表
