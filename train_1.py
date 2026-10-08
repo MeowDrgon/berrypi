@@ -19,9 +19,11 @@ from datetime import datetime
 DB_NAME = "fatigue.db"
 BASE_DIR = "database"
 RULE_DIR = "rules"
+MODEL_ARCHIVE_DIR = os.path.join(RULE_DIR, "archive")
 
 os.makedirs(BASE_DIR, exist_ok=True)
 os.makedirs(RULE_DIR, exist_ok=True)
+os.makedirs(MODEL_ARCHIVE_DIR, exist_ok=True)
 
 
 # ==========================================
@@ -170,6 +172,10 @@ def get_personal_df_from_db(user_id):
         label_name AS LabelName
     FROM fatigue_data
     WHERE user_id = ?
+      AND (
+          label_source = 'human_review'
+          OR reviewed_label IS NOT NULL
+      )
     """
 
     df = pd.read_sql_query(
@@ -551,15 +557,39 @@ def train_multiclass_rule_from_dataset(df, user_type):
 # ==========================================
 # 儲存 rule.json
 # ==========================================
-def save_rule(user_id, rule):
+def save_rule(user_id, rule, training_rows):
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    version = f"multiclass_rule_{timestamp}"
+    rule["version"] = version
 
     rule_path = get_rule_path(user_id)
+    archive_path = os.path.join(MODEL_ARCHIVE_DIR, f"{user_id}_{version}.json")
+
+    with open(archive_path, "w", encoding="utf-8") as f:
+        json.dump(rule, f, indent=4, ensure_ascii=False)
 
     with open(rule_path, "w", encoding="utf-8") as f:
         json.dump(rule, f, indent=4, ensure_ascii=False)
 
-    print(f"\n[SAVED] Rule saved to {rule_path}")
-    print(json.dumps(rule, indent=4, ensure_ascii=False))
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("UPDATE model_versions SET is_active = 0 WHERE user_id = ?", (str(user_id),))
+    conn.execute("""
+        INSERT INTO model_versions (
+            user_id, version, model_type, big_dataset_type,
+            training_rows, is_active, rule_path
+        )
+        VALUES (?, ?, 'multiclass_rule', ?, ?, 1, ?)
+    """, (
+        str(user_id), version, rule.get("big_dataset_type"),
+        int(training_rows), rule_path
+    ))
+    conn.commit()
+    conn.close()
+
+    print(f"\n[SAVED] active rule: {rule_path}")
+    print(f"[ARCHIVE] {archive_path}")
+    print(f"[VERSION] {version}")
 
 
 # ==========================================
@@ -585,7 +615,7 @@ def train_user(user_id):
         print(f"[FAILED] User {user_id} rule generation failed")
         return
 
-    save_rule(user_id, rule)
+    save_rule(user_id, rule, len(train_df))
 
     print(f"\n[SUCCESS] User {user_id} personalized rule training completed")
 
