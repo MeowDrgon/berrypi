@@ -406,7 +406,7 @@ async function loadReviews(){
           <p class="muted">時間：${r.time||"-"}　設備：${r.device_id||"-"}</p>
         </div>
         <div>
-          <h3>系統判定：<span class="badge yellow">${r.auto_label_name||"待確認"}</span></h3>
+          <h3>系統判定：<span class="badge yellow">${r.auto_label_name||"待確認"}</span></h3><p class="muted">審核優先級：${r.priority||"low"}　狀態：${r.review_status||"pending"}</p>
           <div class="feature-grid">
             <div class="feature">EAR<br><b>${r.ear}</b></div>
             <div class="feature">MAR<br><b>${r.mar}</b></div>
@@ -417,8 +417,9 @@ async function loadReviews(){
             <div class="feature">HeadMotion<br><b>${r.head_motion}</b></div>
           </div>
           <div class="actions">
-            <button class="success" onclick="review(${r.id},'correct')">✓ 模型正確</button>
-            <button class="danger" onclick="review(${r.id},'false_positive')">✕ 模型誤判</button>
+            <button class="success" onclick="review(${r.id},'NORMAL')">✓ 正常</button>
+            <button class="danger" onclick="review(${r.id},'FATIGUE')">⚠ 疲勞</button>
+            <button onclick="review(${r.id},'OTHER')">其他（不訓練）</button>
           </div>
         </div>
       </div>`).join("");
@@ -427,7 +428,7 @@ async function loadReviews(){
   }
 }
 async function review(id,decision){
-  const text=decision==="correct" ? "確認模型判定正確？" : "確認這筆是模型誤判？";
+  const text="確認人工標註為 "+decision+"？";
   if(!confirm(text)) return;
 
   try{
