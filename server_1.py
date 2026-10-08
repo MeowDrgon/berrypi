@@ -171,6 +171,8 @@ def init_db():
     """, (generate_password_hash("222"),))
 
     conn.commit()
+    from review_queue_1 import migrate as migrate_review_queue
+    migrate_review_queue(conn)
     conn.close()
     print("[DB] SQLite initialized / migrated")
 
@@ -523,150 +525,72 @@ def model_status_api():
 
 @app.route("/api/fatigue/reviews", methods=["GET"])
 def fatigue_reviews_api():
-    user_id = (request.args.get("user_id") or "").strip()
+    from review_queue_1 import category, priority
+    user_id = session.get("user_id")
     if not user_id:
-        return jsonify({"error": "user_id required"}), 400
-
+        return jsonify({"error": "login required"}), 401
     conn = get_db()
     rows = conn.execute("""
-        SELECT
-            id, time,
-            ear, mar, blink, blink_rate_10s,
-            nod_ratio, head_ratio, head_motion,
-            label, label_name,
-            original_label, original_label_name,
-            user_type, created_at
-        FROM pending_data
-        WHERE user_id = ?
-          AND COALESCE(review_status, 'pending') = 'pending'
-        ORDER BY id ASC
+        SELECT * FROM pending_data
+        WHERE user_id=? AND review_status IN ('pending','archived')
+        ORDER BY CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+                 created_at ASC LIMIT 200
     """, (user_id,)).fetchall()
     conn.close()
-
-    result = []
-    for row in rows:
-        item = dict(row)
-        original_label = item["original_label"] if item["original_label"] is not None else item["label"]
-        original_name = item["original_label_name"] or item["label_name"] or LABEL_MAP.get(original_label, "UNKNOWN")
-        result.append({
-            "id": item["id"],
-            "time": item["time"],
-            "device_id": item.get("device_id"),
-            "ear": item["ear"],
-            "mar": item["mar"],
-            "blink": item["blink"],
-            "blink_rate_10s": item["blink_rate_10s"],
-            "nod_ratio": item["nod_ratio"],
-            "head_ratio": item["head_ratio"],
-            "head_motion": item["head_motion"],
-            "auto_label": original_label,
-            "auto_label_name": original_name
-        })
-
-    return jsonify(result)
+    return jsonify([{
+        "id": r["id"], "time": r["time"], "ear": r["ear"],
+        "mar": r["mar"], "blink": r["blink"],
+        "blink_rate_10s": r["blink_rate_10s"],
+        "nod_ratio": r["nod_ratio"], "head_ratio": r["head_ratio"],
+        "head_motion": r["head_motion"],
+        "auto_label_name": r["original_label_name"] or r["label_name"],
+        "category": category(r["original_label"] if r["original_label"] is not None else r["label"]),
+        "priority": r["priority"] or priority(r["label"]),
+        "review_status": r["review_status"], "event_group": r["event_group"]
+    } for r in rows])
 
 
 @app.route("/api/fatigue/review", methods=["POST"])
 def fatigue_review_api():
+    from review_queue_1 import transfer
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "login required"}), 401
     data = request.get_json(silent=True) or {}
     try:
-        pending_id = int(data.get("id"))
-    except (TypeError, ValueError):
-        return jsonify({"error": "id required"}), 400
-
-    user_id = (data.get("reviewed_by") or data.get("user_id") or "").strip()
-    decision = data.get("decision")
-
-    if decision is None and data.get("result") in (0, 1, "0", "1"):
-        decision = "correct" if int(data.get("result")) == 1 else "false_positive"
-
-    if not user_id:
-        return jsonify({"error": "reviewed_by required"}), 400
-    if decision not in ("correct", "false_positive"):
-        return jsonify({"error": "decision must be correct or false_positive"}), 400
-
+        pending_id = int(data["id"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "valid id required"}), 400
+    decision = str(data.get("decision", "")).upper()
+    if decision not in ("NORMAL", "FATIGUE", "OTHER"):
+        return jsonify({"error": "decision must be NORMAL, FATIGUE or OTHER"}), 400
     conn = get_db()
     try:
+        conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("""
-            SELECT *
-            FROM pending_data
-            WHERE id = ?
-              AND user_id = ?
-              AND COALESCE(review_status, 'pending') = 'pending'
+            SELECT * FROM pending_data
+            WHERE id=? AND user_id=? AND review_status IN ('pending','archived')
         """, (pending_id, user_id)).fetchone()
-
         if row is None:
-            return jsonify({"error": "pending data not found or already reviewed"}), 404
-
-        original_label = row["original_label"] if row["original_label"] is not None else row["label"]
-        original_name = row["original_label_name"] or row["label_name"] or LABEL_MAP.get(original_label, "UNKNOWN")
-
-        # 第一階段二選一：正確保留原始模型 Label；誤判改為 NORMAL。
-        reviewed_label = int(original_label) if decision == "correct" else 0
-        reviewed_name = LABEL_MAP.get(reviewed_label, "UNKNOWN")
-
+            conn.rollback()
+            return jsonify({"error": "not found or already reviewed"}), 404
+        if decision != "OTHER":
+            transfer(conn, row, 0 if decision == "NORMAL" else 1, "human_review")
         conn.execute("""
-            INSERT INTO fatigue_data (
-                user_id, time,
-                ear, mar, blink, blink_rate_10s,
-                nod_ratio, head_ratio, head_motion,
-                label, label_name, user_type
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            user_id, row["time"],
-            row["ear"], row["mar"], row["blink"], row["blink_rate_10s"],
-            row["nod_ratio"], row["head_ratio"], row["head_motion"],
-            reviewed_label, reviewed_name, row["user_type"] or "general"
-        ))
-
-        conn.execute("""
-            UPDATE pending_data
-            SET original_label = ?,
-                original_label_name = ?,
-                review_status = 'reviewed',
-                reviewed_label = ?,
-                reviewed_label_name = ?,
-                reviewed_by = ?,
-                reviewed_at = CURRENT_TIMESTAMP
-            WHERE id = ? AND user_id = ?
-        """, (
-            original_label, original_name,
-            reviewed_label, reviewed_name,
-            user_id, pending_id, user_id
-        ))
-
+            UPDATE pending_data SET review_status='reviewed',
+                reviewed_label=?, reviewed_label_name=?,
+                reviewed_by=?, reviewed_at=CURRENT_TIMESTAMP,
+                label_source='human_review'
+            WHERE id=?
+        """, (None if decision == "OTHER" else (0 if decision == "NORMAL" else 1),
+              decision, user_id, pending_id))
         conn.commit()
-        return jsonify({
-            "status": "success",
-            "message": "審核完成，已寫入 fatigue_data",
-            "pending_id": pending_id,
-            "decision": decision,
-            "original_label": original_label,
-            "original_label_name": original_name,
-            "reviewed_label": reviewed_label,
-            "reviewed_label_name": reviewed_name
-        })
-    except Exception as e:
+        return jsonify({"status": "success", "message": "審核完成", "decision": decision})
+    except Exception:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        raise
     finally:
         conn.close()
-
-
-
-@app.route("/api/model/retrain", methods=["POST"])
-def model_retrain_api():
-    secret = request.headers.get("X-Training-Key", "")
-    expected = os.environ.get("TRAINING_API_KEY", "")
-    if not expected or secret != expected:
-        return jsonify({"error": "training authorization required"}), 403
-    try:
-        from train_1 import train_all_users
-        train_all_users()
-        return jsonify({"status": "success", "message": "monthly retraining completed"})
-    except Exception as e:
-        return jsonify({"status": "error", "error": str(e)}), 500
 
 
 def get_big_dataset_path(big_dataset_type=None):
