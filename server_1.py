@@ -782,6 +782,15 @@ def upload_data():
             original_label, original_label_name,
             original_label, original_label_name, user_type
         ))
+        from review_queue_1 import priority, category
+        kind = category(original_label)
+        near = bool(data.get("near_threshold", False))
+        historically_wrong = bool(data.get("historically_wrong", False))
+        assigned_priority = priority(original_label, near, historically_wrong)
+        cursor.execute("""
+            UPDATE pending_data SET priority=?, event_group=?
+            WHERE id=?
+        """, (assigned_priority, str(data.get("event_group") or ""), cursor.lastrowid))
         pending_id = cursor.lastrowid
         conn.commit()
         conn.close()
