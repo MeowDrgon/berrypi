@@ -35,10 +35,10 @@ LABEL_MAP = {
     5: "LOOK_AWAY"
 }
 
-FEATURE_COLUMNS = [
-    "EAR", "MAR", "Blink", "BlinkRate10s",
-    "NodRatio", "HeadRatio", "HeadMotion"
-]
+FATIGUE_FEATURE_COLUMNS = ["EAR", "MAR", "Blink", "BlinkRate10s", "NodRatio"]
+OTHER_FEATURE_COLUMNS = ["HeadRatio", "HeadMotion"]
+# Preserve raw upload/storage schema; OTHER fields are not fatigue training inputs.
+FEATURE_COLUMNS = FATIGUE_FEATURE_COLUMNS + OTHER_FEATURE_COLUMNS
 REQUIRED_COLUMNS = FEATURE_COLUMNS + ["Label"]
 
 
