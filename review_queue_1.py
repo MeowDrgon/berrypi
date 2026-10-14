@@ -4,10 +4,8 @@ import sqlite3
 
 FATIGUE_CODES = {1, 2, 3}
 UNKNOWN_CODES = {-1, 6}
-FATIGUE_FEATURES = ("ear", "mar", "blink", "blink_rate_10s", "nod_ratio")
-OTHER_FEATURES = ("head_ratio", "head_motion")
-# Keep OTHER measurements in stored records, but exclude from fatigue model input.
-FEATURES = FATIGUE_FEATURES + OTHER_FEATURES
+FEATURES = ("ear", "mar", "blink", "blink_rate_10s", "nod_ratio", "head_ratio", "head_motion")
+# All seven measurements are retained for fatigue training; only labels 0-3 are valid.
 
 
 def category(label):
