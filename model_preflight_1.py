@@ -15,7 +15,7 @@ from model_release_1 import get_checked, store
 
 EXPECTED_FEATURES = [
     "ear", "mar", "blink", "blink_rate_10s",
-    "nod_ratio", "head_ratio", "head_motion",
+    "nod_ratio",
 ]
 
 
@@ -43,8 +43,8 @@ def check(registry, version):
     if classes is None or list(classes) != [0, 1]:
         raise ValueError("Trained model classes must be [0,1]")
     samples = pd.DataFrame([
-        [0.30, 0.18, 0, 3.0, 0.06, 0.12, 0.09],
-        [0.17, 0.62, 2, 7.0, 0.38, 0.12, 0.09],
+        [0.30, 0.18, 0, 3.0, 0.06],
+        [0.17, 0.62, 2, 7.0, 0.38],
     ], columns=EXPECTED_FEATURES)
     pred = np.asarray(model.predict(samples))
     if pred.shape != (2,) or not set(pred.tolist()).issubset({0, 1}):
