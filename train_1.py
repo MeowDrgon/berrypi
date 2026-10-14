@@ -65,7 +65,9 @@ FEATURE_COLUMNS = [
     "MAR",
     "Blink",
     "BlinkRate10s",
-    "NodRatio"
+    "NodRatio",
+    "HeadRatio",
+    "HeadMotion"
 ]
 
 REQUIRED_COLUMNS = FEATURE_COLUMNS + ["Label"]
