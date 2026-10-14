@@ -17,9 +17,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_fscore_support
 from sklearn.model_selection import GroupShuffleSplit
 
-FEATURES = ["ear", "mar", "blink", "blink_rate_10s", "nod_ratio"]
-# OTHER-only raw measurements: retained in storage, excluded from fatigue training.
-OTHER_FEATURES = ["head_ratio", "head_motion"]
+FEATURES = ["ear", "mar", "blink", "blink_rate_10s", "nod_ratio", "head_ratio", "head_motion"]
+# All seven measurements contribute to fatigue classification; labels 4/5 are removed.
 MIN_TRAIN_PER_CLASS = 20
 MIN_VALID_PER_CLASS = 10
 MIN_RECALL = 0.80
