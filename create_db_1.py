@@ -49,9 +49,7 @@ label_data = [
     (0, "NORMAL", "正常狀態"),
     (1, "YAWN", "打哈欠"),
     (2, "EYE_CLOSE_OR_BLINK", "閉眼、快速眨眼、眼睛異常"),
-    (3, "NOD", "點頭、低頭"),
-    (4, "SHAKE_HEAD", "搖頭、左右晃頭"),
-    (5, "LOOK_AWAY", "眼神飄移、視線偏移、注意力偏移")
+    (3, "NOD", "點頭、低頭")
 ]
 
 cursor.executemany("""
