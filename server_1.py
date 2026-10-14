@@ -30,14 +30,10 @@ LABEL_MAP = {
     0: "NORMAL",
     1: "YAWN",
     2: "EYE_CLOSE_OR_BLINK",
-    3: "NOD",
-    4: "SHAKE_HEAD",
-    5: "LOOK_AWAY"
+    3: "NOD"
 }
-# Preserve event IDs and names for existing records and rules.
-# SHAKE_HEAD (4) and LOOK_AWAY (5) belong to OTHER, not FATIGUE.
-LABEL_CATEGORY = {0: "NORMAL", 1: "FATIGUE", 2: "FATIGUE",
-                  3: "FATIGUE", 4: "OTHER", 5: "OTHER"}
+# Active event labels are NORMAL (0) and fatigue events (1-3) only.
+LABEL_CATEGORY = {0: "NORMAL", 1: "FATIGUE", 2: "FATIGUE", 3: "FATIGUE"}
 
 FATIGUE_FEATURE_COLUMNS = ["EAR", "MAR", "Blink", "BlinkRate10s", "NodRatio"]
 OTHER_FEATURE_COLUMNS = ["HeadRatio", "HeadMotion"]
@@ -669,8 +665,6 @@ def judge_by_rule(rule, data):
         mar = float(data.get("MAR", 0))
         blink_rate_10s = float(data.get("BlinkRate10s", 0))
         nod_ratio = float(data.get("NodRatio", 0))
-        head_ratio = float(data.get("HeadRatio", 0))
-        head_motion = float(data.get("HeadMotion", 0))
         rules = rule["rules"]
 
         if mar > rules["YAWN"]["YAWN_THRESHOLD"]:
@@ -682,10 +676,6 @@ def judge_by_rule(rule, data):
             return 2, "EYE_CLOSE_OR_BLINK"
         if nod_ratio > rules["NOD"]["BASELINE_NOD"] + rules["NOD"]["NOD_DELTA"]:
             return 3, "NOD"
-        if head_motion > rules["SHAKE_HEAD"]["SHAKE_THRESHOLD"]:
-            return 4, "SHAKE_HEAD"
-        if abs(head_ratio - rules["LOOK_AWAY"]["BASELINE_HEAD"]) > rules["LOOK_AWAY"]["HEAD_DELTA"]:
-            return 5, "LOOK_AWAY"
         return 0, "NORMAL"
     except Exception as e:
         print("[JUDGE ERROR]", e)
@@ -759,9 +749,9 @@ def upload_data():
         except (TypeError, ValueError):
             original_label = 0
 
-        original_label_name = data.get("LabelName") or LABEL_MAP.get(
-            original_label, "UNKNOWN"
-        )
+        if original_label not in LABEL_MAP:
+            return jsonify({"status": "error", "msg": "Unsupported label; allowed: 0, 1, 2, 3"}), 400
+        original_label_name = LABEL_MAP[original_label]
 
         conn = get_db()
         cursor = conn.cursor()
