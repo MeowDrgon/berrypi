@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import sqlite3
 
 FATIGUE_CODES = {1, 2, 3}
+OTHER_CODES = {4, 5}  # SHAKE_HEAD / LOOK_AWAY
 UNKNOWN_CODES = {-1, 6}
 FATIGUE_FEATURES = ("ear", "mar", "blink", "blink_rate_10s", "nod_ratio")
 OTHER_FEATURES = ("head_ratio", "head_motion")
@@ -19,11 +20,13 @@ def category(label):
         return "NORMAL"
     if label in FATIGUE_CODES:
         return "FATIGUE"
-    return "UNKNOWN"  # LOOK_AWAY and SHAKE_HEAD are not fatigue
+    if label in OTHER_CODES:
+        return "OTHER"
+    return "UNKNOWN"
 
 
 def priority(label, near_threshold=False, historically_wrong=False):
-    if category(label) == "UNKNOWN" or historically_wrong:
+    if category(label) in ("UNKNOWN", "OTHER") or historically_wrong:
         return "high"
     if category(label) == "FATIGUE" or near_threshold:
         return "medium"
@@ -72,7 +75,7 @@ def transfer(conn, row, label, source):
 
 
 def expire(conn, now=None):
-    """NORMAL/FATIGUE: 7 days -> auto label; UNKNOWN: archive at 7, delete at 30."""
+    """NORMAL/FATIGUE: 7 days -> auto label; OTHER/UNKNOWN: archive at 7, delete at 30."""
     now = now or datetime.now(timezone.utc)
     seven = (now - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
     thirty = (now - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
@@ -86,7 +89,7 @@ def expire(conn, now=None):
         """, (seven,)).fetchall()
         for row in rows:
             kind = category(row["original_label"] if row["original_label"] is not None else row["label"])
-            if kind == "UNKNOWN":
+            if kind in ("OTHER", "UNKNOWN"):
                 conn.execute("UPDATE pending_data SET review_status='archived', archived_at=CURRENT_TIMESTAMP WHERE id=?", (row["id"],))
                 archived += 1
             else:
