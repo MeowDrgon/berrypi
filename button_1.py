@@ -21,8 +21,6 @@ from collections import deque
 # 1 = YAWN 打哈欠
 # 2 = EYE_CLOSE_OR_BLINK 眼睛異常：閉眼 / 快速眨眼 / 眼部不穩
 # 3 = NOD 點頭 / 低頭
-# 4 = SHAKE_HEAD 搖頭 / 左右晃頭
-# 5 = LOOK_AWAY 眼神飄移 / 視線偏移 / 注意力偏移
 # Q = 離開
 # ==========================================
 
@@ -60,9 +58,7 @@ LABEL_MAP = {
     0: "NORMAL",
     1: "YAWN",
     2: "EYE_CLOSE_OR_BLINK",
-    3: "NOD",
-    4: "SHAKE_HEAD",
-    5: "LOOK_AWAY"
+    3: "NOD"
 }
 # ==========================================
 # 人群類型
@@ -83,8 +79,6 @@ KEY_TO_LABEL = {
     pygame.K_1: 1,
     pygame.K_2: 2,
     pygame.K_3: 3,
-    pygame.K_4: 4,
-    pygame.K_5: 5,
 }
 
 # ==========================================
@@ -271,9 +265,6 @@ def load_local_rule():
             default_rule["BASELINE_NOD"] = rules["NOD"]["BASELINE_NOD"]
             default_rule["NOD_DELTA"] = rules["NOD"]["NOD_DELTA"]
 
-        if "LOOK_AWAY" in rules:
-            default_rule["BASELINE_HEAD"] = rules["LOOK_AWAY"]["BASELINE_HEAD"]
-            default_rule["HEAD_DELTA"] = rules["LOOK_AWAY"]["HEAD_DELTA"]
 
     return default_rule
 
@@ -576,8 +567,6 @@ def main():
     print("1 / Y = YAWN 打哈欠")
     print("2 / E/B/C = EYE_CLOSE_OR_BLINK 眼睛異常")
     print("3 / D = NOD 點頭 / 低頭")
-    print("4 / S = SHAKE_HEAD 搖頭 / 左右晃頭")
-    print("5 / L = LOOK_AWAY 眼神飄移 / 視線偏移")
     print("Q = QUIT")
     print("資料會存到：", DATASET_FILE)
     print("======================================")
@@ -619,9 +608,6 @@ def main():
                 baseline_nod = rules["NOD"]["BASELINE_NOD"]
                 NOD_DELTA = rules["NOD"]["NOD_DELTA"]
 
-            if "LOOK_AWAY" in rules:
-                baseline_head = rules["LOOK_AWAY"]["BASELINE_HEAD"]
-                HEAD_DELTA = rules["LOOK_AWAY"]["HEAD_DELTA"]
 
             print("[RULE UPDATED]")
             # 最後才清掉
@@ -835,10 +821,6 @@ def main():
                     alert_list.append("YAWNING")
                 if nod_alert:
                     alert_list.append("NODDING_DOWN")
-                if distract_alert:
-                    alert_list.append("LOOK_AWAY")
-                if head_motion > 0.05:
-                    alert_list.append("HEAD_SHAKE")
 
                 auto_status = "NORMAL" if len(alert_list) == 0 else "+".join(alert_list)
 
