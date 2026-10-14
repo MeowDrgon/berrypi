@@ -8,7 +8,10 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-FEATURES = ("ear", "mar", "blink", "blink_rate_10s", "nod_ratio", "head_ratio", "head_motion")
+FATIGUE_FEATURES = ("ear", "mar", "blink", "blink_rate_10s", "nod_ratio")
+OTHER_FEATURES = ("head_ratio", "head_motion")
+# Synthetic database retains OTHER fields for upload/review compatibility.
+FEATURES = FATIGUE_FEATURES + OTHER_FEATURES
 
 
 def build(path):
