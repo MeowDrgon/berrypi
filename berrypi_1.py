@@ -463,14 +463,8 @@ def play_alert_sound(alarm_sound, status_name):
             return
 
         if HAS_WINSOUND:
-            if status_name == "YAWN":
-                alarm.wav
-            elif status_name == "EYE_CLOSE_OR_BLINK":
-                alarm.wav
-            elif status_name == "NOD":
-                alarm.wav
-            else:
-                alarm.wav
+            # Windows fallback when alarm.wav is unavailable.
+            winsound.Beep(1000, 300)
 
     except Exception as e:
         print("[ALERT SOUND ERROR]", repr(e))
