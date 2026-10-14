@@ -240,9 +240,7 @@ def load_local_rule():
         "EAR_THRESHOLD": 0.21,
         "YAWN_THRESHOLD": 0.35,
         "BASELINE_NOD": None,
-        "NOD_DELTA": 0.05,
-        "BASELINE_HEAD": None,
-        "HEAD_DELTA": 0.15
+        "NOD_DELTA": 0.05
     }
 
     if not os.path.exists(RULE_FILE):
@@ -495,29 +493,24 @@ def main():
     eye_closed_start = None
     yawn_start = None
     nod_start = None
-    distract_start = None
 
     eye_alert = False
     yawn_alert = False
     nod_alert = False
-    distract_alert = False
 
     EYE_CLOSED_SECONDS = 0.8
     YAWN_SECONDS = 0.8
     NOD_SECONDS = 0.8
-    DISTRACT_SECONDS = 2.0
 
     rule = load_local_rule()
     EAR_THRESHOLD = rule["EAR_THRESHOLD"]
     YAWN_THRESHOLD = rule["YAWN_THRESHOLD"]
     NOD_DELTA = rule["NOD_DELTA"]
-    HEAD_DELTA = rule["HEAD_DELTA"]
 
     print("========== Current Rule ==========")
     print(f"EAR_THRESHOLD  = {EAR_THRESHOLD}")
     print(f"YAWN_THRESHOLD = {YAWN_THRESHOLD}")
     print(f"NOD_DELTA      = {NOD_DELTA}")
-    print(f"HEAD_DELTA     = {HEAD_DELTA}")
     print("==================================")
 
     calibration_start = time.time()
@@ -732,8 +725,6 @@ def main():
 
                     if rule.get("BASELINE_NOD") is not None:
                         baseline_nod = rule["BASELINE_NOD"]
-                    if rule.get("BASELINE_HEAD") is not None:
-                        baseline_head = rule["BASELINE_HEAD"]
 
                     calibrated = True
 
@@ -799,18 +790,6 @@ def main():
                 else:
                     nod_start = None
                     nod_alert = False
-
-                # Look away / head drift
-                head_diff = abs(h_ratio - baseline_head)
-                if head_diff > HEAD_DELTA:
-                    if distract_start is None:
-                        distract_start = current_time
-                    distract_time = current_time - distract_start
-                    if distract_time >= DISTRACT_SECONDS:
-                        distract_alert = True
-                else:
-                    distract_start = None
-                    distract_alert = False
 
                 alert_list = []
                 if eye_alert:
