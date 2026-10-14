@@ -53,9 +53,7 @@ LABEL_MAP = {
     0: "NORMAL",
     1: "YAWN",
     2: "EYE_CLOSE_OR_BLINK",
-    3: "NOD",
-    4: "SHAKE_HEAD",
-    5: "LOOK_AWAY"
+    3: "NOD"
 }
 
 
@@ -67,9 +65,7 @@ FEATURE_COLUMNS = [
     "MAR",
     "Blink",
     "BlinkRate10s",
-    "NodRatio",
-    "HeadRatio",
-    "HeadMotion"
+    "NodRatio"
 ]
 
 REQUIRED_COLUMNS = FEATURE_COLUMNS + ["Label"]
@@ -388,8 +384,6 @@ def train_multiclass_rule_from_dataset(df, user_type):
     yawn_df = df[df["Label"] == 1]
     eye_df = df[df["Label"] == 2]
     nod_df = df[df["Label"] == 3]
-    shake_df = df[df["Label"] == 4]
-    look_df = df[df["Label"] == 5]
 
     if len(normal_df) < 5:
         print("[ERROR] NORMAL 資料太少，至少需要 5 筆")
@@ -402,8 +396,6 @@ def train_multiclass_rule_from_dataset(df, user_type):
     normal_mar = safe_median(normal_df, "MAR", 0.20)
     normal_blink_rate = safe_median(normal_df, "BlinkRate10s", 0)
     normal_nod = safe_median(normal_df, "NodRatio", 0.30)
-    normal_head = safe_median(normal_df, "HeadRatio", 0.50)
-    normal_head_motion = safe_median(normal_df, "HeadMotion", 0)
 
     # ==================================
     # 1. YAWN rule
@@ -452,41 +444,6 @@ def train_multiclass_rule_from_dataset(df, user_type):
         nod_delta = 0.05
 
     # ==================================
-    # 4. SHAKE_HEAD rule
-    # ==================================
-    if len(shake_df) >= 3:
-        shake_motion = safe_median(shake_df, "HeadMotion", normal_head_motion)
-
-        if shake_motion > normal_head_motion:
-            shake_threshold = (normal_head_motion + shake_motion) / 2
-        else:
-            shake_threshold = max(0.08, normal_head_motion + 0.05)
-    else:
-        shake_threshold = max(0.08, normal_head_motion + 0.05)
-
-    # ==================================
-    # 5. LOOK_AWAY rule
-    # ==================================
-    normal_head_diff = abs(normal_df["HeadRatio"] - normal_head)
-    normal_head_delta_95 = safe_quantile(normal_head_diff, 0.95, 0.15)
-
-    if len(look_df) >= 3:
-        look_head_diff = abs(look_df["HeadRatio"] - normal_head)
-
-        look_delta = safe_median(
-            pd.DataFrame({"diff": look_head_diff}),
-            "diff",
-            normal_head_delta_95
-        )
-
-        head_delta = max(
-            0.12,
-            (normal_head_delta_95 + look_delta) / 2
-        )
-    else:
-        head_delta = max(0.15, normal_head_delta_95)
-
-    # ==================================
     # rule JSON
     # 不保留舊版相容欄位
     # ==================================
@@ -508,9 +465,7 @@ def train_multiclass_rule_from_dataset(df, user_type):
             "EAR": round(float(normal_ear), 3),
             "MAR": round(float(normal_mar), 3),
             "BlinkRate10s": round(float(normal_blink_rate), 3),
-            "NodRatio": round(float(normal_nod), 3),
-            "HeadRatio": round(float(normal_head), 3),
-            "HeadMotion": round(float(normal_head_motion), 3)
+            "NodRatio": round(float(normal_nod), 3)
         },
 
         "rules": {
@@ -532,19 +487,6 @@ def train_multiclass_rule_from_dataset(df, user_type):
                 "condition": "NodRatio > BASELINE_NOD + NOD_DELTA",
                 "BASELINE_NOD": round(float(normal_nod), 3),
                 "NOD_DELTA": round(float(nod_delta), 3)
-            },
-
-            "SHAKE_HEAD": {
-                "label": 4,
-                "condition": "HeadMotion > SHAKE_THRESHOLD",
-                "SHAKE_THRESHOLD": round(float(shake_threshold), 3)
-            },
-
-            "LOOK_AWAY": {
-                "label": 5,
-                "condition": "abs(HeadRatio - BASELINE_HEAD) > HEAD_DELTA",
-                "BASELINE_HEAD": round(float(normal_head), 3),
-                "HEAD_DELTA": round(float(head_delta), 3)
             }
         },
 
