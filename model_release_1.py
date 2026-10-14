@@ -38,7 +38,7 @@ def store(root):
 
 
 def version_path(root, version):
-    if not version or not all(c.isalnum() or c in "-_" for c in version):
+    if not version or not all(c.isascii() and (c.isalnum() or c in "-_.") for c in version):
         raise ValueError("Version must contain only letters, digits, hyphens or underscores")
     return root / "versions" / version
 
