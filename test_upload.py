@@ -23,9 +23,9 @@ samples = [
         "mar": 0.85,
     },
     {
-        "name": "視線離開",
-        "label": 5,
-        "label_name": "LOOK_AWAY",
+        "name": "點頭",
+        "label": 3,
+        "label_name": "NOD",
         "ear": 0.20,
         "mar": 0.15,
     },
