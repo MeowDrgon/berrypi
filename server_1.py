@@ -34,6 +34,10 @@ LABEL_MAP = {
     4: "SHAKE_HEAD",
     5: "LOOK_AWAY"
 }
+# Preserve event IDs and names for existing records and rules.
+# SHAKE_HEAD (4) and LOOK_AWAY (5) belong to OTHER, not FATIGUE.
+LABEL_CATEGORY = {0: "NORMAL", 1: "FATIGUE", 2: "FATIGUE",
+                  3: "FATIGUE", 4: "OTHER", 5: "OTHER"}
 
 FATIGUE_FEATURE_COLUMNS = ["EAR", "MAR", "Blink", "BlinkRate10s", "NodRatio"]
 OTHER_FEATURE_COLUMNS = ["HeadRatio", "HeadMotion"]
