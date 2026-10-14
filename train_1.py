@@ -19,9 +19,11 @@ from datetime import datetime
 DB_NAME = "fatigue.db"
 BASE_DIR = "database"
 RULE_DIR = "rules"
+MODEL_ARCHIVE_DIR = os.path.join(RULE_DIR, "archive")
 
 os.makedirs(BASE_DIR, exist_ok=True)
 os.makedirs(RULE_DIR, exist_ok=True)
+os.makedirs(MODEL_ARCHIVE_DIR, exist_ok=True)
 
 
 # ==========================================
@@ -51,9 +53,7 @@ LABEL_MAP = {
     0: "NORMAL",
     1: "YAWN",
     2: "EYE_CLOSE_OR_BLINK",
-    3: "NOD",
-    4: "SHAKE_HEAD",
-    5: "LOOK_AWAY"
+    3: "NOD"
 }
 
 
@@ -170,6 +170,10 @@ def get_personal_df_from_db(user_id):
         label_name AS LabelName
     FROM fatigue_data
     WHERE user_id = ?
+      AND (
+          label_source = 'human_review'
+          OR reviewed_label IS NOT NULL
+      )
     """
 
     df = pd.read_sql_query(
@@ -382,8 +386,6 @@ def train_multiclass_rule_from_dataset(df, user_type):
     yawn_df = df[df["Label"] == 1]
     eye_df = df[df["Label"] == 2]
     nod_df = df[df["Label"] == 3]
-    shake_df = df[df["Label"] == 4]
-    look_df = df[df["Label"] == 5]
 
     if len(normal_df) < 5:
         print("[ERROR] NORMAL 資料太少，至少需要 5 筆")
@@ -396,8 +398,6 @@ def train_multiclass_rule_from_dataset(df, user_type):
     normal_mar = safe_median(normal_df, "MAR", 0.20)
     normal_blink_rate = safe_median(normal_df, "BlinkRate10s", 0)
     normal_nod = safe_median(normal_df, "NodRatio", 0.30)
-    normal_head = safe_median(normal_df, "HeadRatio", 0.50)
-    normal_head_motion = safe_median(normal_df, "HeadMotion", 0)
 
     # ==================================
     # 1. YAWN rule
@@ -446,41 +446,6 @@ def train_multiclass_rule_from_dataset(df, user_type):
         nod_delta = 0.05
 
     # ==================================
-    # 4. SHAKE_HEAD rule
-    # ==================================
-    if len(shake_df) >= 3:
-        shake_motion = safe_median(shake_df, "HeadMotion", normal_head_motion)
-
-        if shake_motion > normal_head_motion:
-            shake_threshold = (normal_head_motion + shake_motion) / 2
-        else:
-            shake_threshold = max(0.08, normal_head_motion + 0.05)
-    else:
-        shake_threshold = max(0.08, normal_head_motion + 0.05)
-
-    # ==================================
-    # 5. LOOK_AWAY rule
-    # ==================================
-    normal_head_diff = abs(normal_df["HeadRatio"] - normal_head)
-    normal_head_delta_95 = safe_quantile(normal_head_diff, 0.95, 0.15)
-
-    if len(look_df) >= 3:
-        look_head_diff = abs(look_df["HeadRatio"] - normal_head)
-
-        look_delta = safe_median(
-            pd.DataFrame({"diff": look_head_diff}),
-            "diff",
-            normal_head_delta_95
-        )
-
-        head_delta = max(
-            0.12,
-            (normal_head_delta_95 + look_delta) / 2
-        )
-    else:
-        head_delta = max(0.15, normal_head_delta_95)
-
-    # ==================================
     # rule JSON
     # 不保留舊版相容欄位
     # ==================================
@@ -502,9 +467,7 @@ def train_multiclass_rule_from_dataset(df, user_type):
             "EAR": round(float(normal_ear), 3),
             "MAR": round(float(normal_mar), 3),
             "BlinkRate10s": round(float(normal_blink_rate), 3),
-            "NodRatio": round(float(normal_nod), 3),
-            "HeadRatio": round(float(normal_head), 3),
-            "HeadMotion": round(float(normal_head_motion), 3)
+            "NodRatio": round(float(normal_nod), 3)
         },
 
         "rules": {
@@ -526,19 +489,6 @@ def train_multiclass_rule_from_dataset(df, user_type):
                 "condition": "NodRatio > BASELINE_NOD + NOD_DELTA",
                 "BASELINE_NOD": round(float(normal_nod), 3),
                 "NOD_DELTA": round(float(nod_delta), 3)
-            },
-
-            "SHAKE_HEAD": {
-                "label": 4,
-                "condition": "HeadMotion > SHAKE_THRESHOLD",
-                "SHAKE_THRESHOLD": round(float(shake_threshold), 3)
-            },
-
-            "LOOK_AWAY": {
-                "label": 5,
-                "condition": "abs(HeadRatio - BASELINE_HEAD) > HEAD_DELTA",
-                "BASELINE_HEAD": round(float(normal_head), 3),
-                "HEAD_DELTA": round(float(head_delta), 3)
             }
         },
 
@@ -551,15 +501,39 @@ def train_multiclass_rule_from_dataset(df, user_type):
 # ==========================================
 # 儲存 rule.json
 # ==========================================
-def save_rule(user_id, rule):
+def save_rule(user_id, rule, training_rows):
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    version = f"multiclass_rule_{timestamp}"
+    rule["version"] = version
 
     rule_path = get_rule_path(user_id)
+    archive_path = os.path.join(MODEL_ARCHIVE_DIR, f"{user_id}_{version}.json")
+
+    with open(archive_path, "w", encoding="utf-8") as f:
+        json.dump(rule, f, indent=4, ensure_ascii=False)
 
     with open(rule_path, "w", encoding="utf-8") as f:
         json.dump(rule, f, indent=4, ensure_ascii=False)
 
-    print(f"\n[SAVED] Rule saved to {rule_path}")
-    print(json.dumps(rule, indent=4, ensure_ascii=False))
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("UPDATE model_versions SET is_active = 0 WHERE user_id = ?", (str(user_id),))
+    conn.execute("""
+        INSERT INTO model_versions (
+            user_id, version, model_type, big_dataset_type,
+            training_rows, is_active, rule_path
+        )
+        VALUES (?, ?, 'multiclass_rule', ?, ?, 1, ?)
+    """, (
+        str(user_id), version, rule.get("big_dataset_type"),
+        int(training_rows), rule_path
+    ))
+    conn.commit()
+    conn.close()
+
+    print(f"\n[SAVED] active rule: {rule_path}")
+    print(f"[ARCHIVE] {archive_path}")
+    print(f"[VERSION] {version}")
 
 
 # ==========================================
@@ -585,7 +559,7 @@ def train_user(user_id):
         print(f"[FAILED] User {user_id} rule generation failed")
         return
 
-    save_rule(user_id, rule)
+    save_rule(user_id, rule, len(train_df))
 
     print(f"\n[SUCCESS] User {user_id} personalized rule training completed")
 

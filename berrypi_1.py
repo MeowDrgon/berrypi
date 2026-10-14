@@ -60,8 +60,6 @@ ALARM_FILE = "alarm.wav"       # 可有可無，有就播放 wav，沒有就用 
 
 # 安全下限，避免訓練出的 threshold 太敏感
 MIN_BLINK_RATE_THRESHOLD = 6.0
-MIN_SHAKE_THRESHOLD = 0.03
-MIN_HEAD_DELTA = 0.10
 MIN_NOD_DELTA = 0.05
 
 
@@ -72,9 +70,7 @@ LABEL_MAP = {
     0: "NORMAL",
     1: "YAWN",
     2: "EYE_CLOSE_OR_BLINK",
-    3: "NOD",
-    4: "SHAKE_HEAD",
-    5: "LOOK_AWAY"
+    3: "NOD"
 }
 
 
@@ -295,23 +291,9 @@ def get_rule_thresholds(rule):
             rules["NOD"]["NOD_DELTA"]
         )
 
-        shake_threshold = float(
-            rules["SHAKE_HEAD"]["SHAKE_THRESHOLD"]
-        )
-
-        baseline_head = float(
-            rules["LOOK_AWAY"]["BASELINE_HEAD"]
-        )
-
-        head_delta = float(
-            rules["LOOK_AWAY"]["HEAD_DELTA"]
-        )
-
         # 安全下限，避免過度敏感
         blink_rate_threshold = max(MIN_BLINK_RATE_THRESHOLD, blink_rate_threshold)
-        shake_threshold = max(MIN_SHAKE_THRESHOLD, shake_threshold)
         nod_delta = max(MIN_NOD_DELTA, nod_delta)
-        head_delta = max(MIN_HEAD_DELTA, head_delta)
 
         thresholds = {
             "YAWN_THRESHOLD": yawn_threshold,
@@ -319,9 +301,6 @@ def get_rule_thresholds(rule):
             "BLINK_RATE_THRESHOLD": blink_rate_threshold,
             "BASELINE_NOD": baseline_nod,
             "NOD_DELTA": nod_delta,
-            "SHAKE_THRESHOLD": shake_threshold,
-            "BASELINE_HEAD": baseline_head,
-            "HEAD_DELTA": head_delta,
         }
 
         return thresholds
@@ -358,12 +337,6 @@ def judge_by_rule(
         + thresholds["NOD_DELTA"]
     ):
         return 3, "NOD"
-
-    if head_motion > thresholds["SHAKE_THRESHOLD"]:
-        return 4, "SHAKE_HEAD"
-
-    if abs(h_ratio - thresholds["BASELINE_HEAD"]) > thresholds["HEAD_DELTA"]:
-        return 5, "LOOK_AWAY"
 
     return 0, "NORMAL"
 
@@ -490,18 +463,8 @@ def play_alert_sound(alarm_sound, status_name):
             return
 
         if HAS_WINSOUND:
-            if status_name == "YAWN":
-                alarm.wav
-            elif status_name == "EYE_CLOSE_OR_BLINK":
-                alarm.wav
-            elif status_name == "NOD":
-                alarm.wav
-            elif status_name == "SHAKE_HEAD":
-                alarm.wav
-            elif status_name == "LOOK_AWAY":
-                alarm.wav
-            else:
-                alarm.wav
+            # Windows fallback when alarm.wav is unavailable.
+            winsound.Beep(1000, 300)
 
     except Exception as e:
         print("[ALERT SOUND ERROR]", repr(e))
@@ -979,14 +942,14 @@ def main():
             draw_text(
                 screen,
                 font,
-                f"Head: {h_ratio:.2f} / Base: {thresholds['BASELINE_HEAD']:.2f}",
+                f"Head: {h_ratio:.2f} (OTHER)",
                 10,
                 205
             )
             draw_text(
                 screen,
                 font,
-                f"HeadMotion: {head_motion:.3f} / TH: {thresholds['SHAKE_THRESHOLD']:.3f}",
+                f"HeadMotion: {head_motion:.3f} (OTHER)",
                 10,
                 235
             )
