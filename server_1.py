@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for
+from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for, send_from_directory
 import os
 import sqlite3
 import json
@@ -690,11 +690,8 @@ def judge_by_rule(rule, data):
 
 @app.route("/", methods=["GET"])
 def home():
-    return jsonify({
-        "status": "ok",
-        "msg": "Fatigue server is running",
-        "version": "multiclass_rule_server_phase1_review"
-    })
+    # Serve the web UI from the same origin as the session-protected API.
+    return send_from_directory(app.root_path, "berrypi.html")
 
 
 @app.route("/user_type/<user_id>", methods=["POST"])
