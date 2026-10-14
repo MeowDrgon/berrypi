@@ -35,10 +35,8 @@ LABEL_MAP = {
 # Active event labels are NORMAL (0) and fatigue events (1-3) only.
 LABEL_CATEGORY = {0: "NORMAL", 1: "FATIGUE", 2: "FATIGUE", 3: "FATIGUE"}
 
-FATIGUE_FEATURE_COLUMNS = ["EAR", "MAR", "Blink", "BlinkRate10s", "NodRatio"]
-OTHER_FEATURE_COLUMNS = ["HeadRatio", "HeadMotion"]
-# Preserve raw upload/storage schema; OTHER fields are not fatigue training inputs.
-FEATURE_COLUMNS = FATIGUE_FEATURE_COLUMNS + OTHER_FEATURE_COLUMNS
+FEATURE_COLUMNS = ["EAR", "MAR", "Blink", "BlinkRate10s", "NodRatio", "HeadRatio", "HeadMotion"]
+# All seven features are available to fatigue models; valid event labels are 0-3.
 REQUIRED_COLUMNS = FEATURE_COLUMNS + ["Label"]
 
 
